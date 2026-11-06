@@ -285,6 +285,37 @@ def test_get_discrete_gaussian_erf_kernel1d_tensor(window_size, sigma, device, d
     assert_close(actual.sum(), expected.sum())
 
 
+@pytest.mark.parametrize(
+    "window_size, sigma, expected",
+    [
+        # At sigma == 0 each tap is 0.5 * (sign(x + 0.5) - sign(x - 0.5)), the limit of erf(+-inf * y), normalized.
+        # On an even window the two middle taps sit half a sample from the centre and used to give inf * 0 = nan.
+        (4, [[0.0]], [[0.0, 0.5, 0.5, 0.0]]),
+        (6, [[0.0]], [[0.0, 0.0, 0.5, 0.5, 0.0, 0.0]]),
+        (3, [[0.0]], [[0.0, 1.0, 0.0]]),
+        (5, [[0.0]], [[0.0, 0.0, 1.0, 0.0, 0.0]]),
+        # A batched sigma: the zero row is the limit, and the small row was already finite.
+        (4, [[0.0], [1e-3]], [[0.0, 0.5, 0.5, 0.0], [0.0, 0.5, 0.5, 0.0]]),
+    ],
+)
+def test_gaussian_erf_kernel_sigma_zero_is_impulse_6619(window_size, sigma, expected, device, dtype):
+    actual = get_gaussian_erf_kernel1d(
+        window_size, torch.tensor(sigma, device=device, dtype=dtype), force_even=window_size % 2 == 0
+    )
+    assert_close(actual, torch.tensor(expected, device=device, dtype=dtype), atol=1e-4, rtol=1e-4)
+
+
+@pytest.mark.parametrize("window_size", [4, 5])
+def test_gaussian_erf_kernel_sigma_gradient_is_finite_at_zero_6619(window_size, device, dtype):
+    sigma = torch.zeros(1, 1, device=device, dtype=dtype, requires_grad=True)
+
+    out = gaussian_discrete_erf(window_size, sigma)
+    (out * torch.arange(window_size, device=device, dtype=dtype)).sum().backward()
+
+    assert sigma.grad is not None
+    assert torch.isfinite(sigma.grad).all()
+
+
 @pytest.mark.parametrize("window_size", [5, 11])
 @pytest.mark.parametrize("sigma", [1.5, 5.0])
 def test_get_gaussian_discrete_kernel1d_float(window_size, sigma, device, dtype):

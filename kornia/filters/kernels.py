@@ -259,10 +259,18 @@ def gaussian_discrete_erf(
     centre = (window_size - 1) / 2
     x = (torch.arange(window_size, device=sigma.device, dtype=sigma.dtype) - centre).expand(batch_size, -1)
 
-    t = 0.70710678 / sigma.abs()
-    # t = torch.tensor(2, device=sigma.device, dtype=sigma.dtype).sqrt() / (sigma.abs() * 2)
+    # An infinite t is the unit-impulse limit of the kernel: sigma == 0 exactly, or a sigma so small that
+    # 1 / sigma overflows the working dtype. There ``t * (x +- 0.5)`` is ``inf * 0`` on the tap of an even window
+    # that sits half a sample from the centre, and the NaN spreads to every tap in the normalization (#6619).
+    # As in `gaussian`, compute the erf from a finite stand-in and select the limit, which is the sign
+    # difference ``erf(+-inf * y) = sign(y)``, so the sigma gradient is not NaN either. A NaN sigma is not
+    # caught by the comparison and still propagates.
+    abs_sigma = sigma.abs()
+    is_impulse = (0.70710678 / abs_sigma).isinf()
+    t = 0.70710678 / torch.where(is_impulse, torch.ones_like(abs_sigma), abs_sigma)
 
     gauss = 0.5 * ((t * (x + 0.5)).erf() - (t * (x - 0.5)).erf())
+    gauss = torch.where(is_impulse, 0.5 * ((x + 0.5).sign() - (x - 0.5).sign()), gauss)
     gauss = gauss.clamp(min=0)
 
     return gauss / gauss.sum(-1, keepdim=True)

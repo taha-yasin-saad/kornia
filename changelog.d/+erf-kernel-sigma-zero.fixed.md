@@ -1,0 +1,1 @@
+`get_gaussian_erf_kernel1d` and `gaussian_discrete_erf` now return the unit-impulse limit `[0, 0.5, 0.5, 0]` for `sigma = 0` on an even window instead of all NaN, and their `sigma` gradient at 0 is finite.
