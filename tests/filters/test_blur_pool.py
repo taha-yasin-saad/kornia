@@ -257,6 +257,17 @@ class TestMaxBlurPool(BaseTester):
         # Code that reads the attribute still gets a bool.
         assert module.ceil_mode is False
 
+    @pytest.mark.parametrize("shape", [(3, 8, 9), (8, 8, 9)], ids=["c_ne_h", "c_eq_h"])
+    @pytest.mark.parametrize("op", ["function", "module"])
+    def test_unbatched_input_raises_shape_error_6620(self, shape, op, device, dtype):
+        # A (C, H, W) input used to fail inside conv2d, or to run with H read as the channel count when C == H.
+        from kornia.core.exceptions import ShapeError
+
+        data = torch.rand(*shape, device=device, dtype=dtype)
+        pool = (lambda x: max_blur_pool2d(x, 3)) if op == "function" else MaxBlurPool2D(3)
+        with pytest.raises(ShapeError):
+            pool(data)
+
     def test_exception(self):
         data = torch.rand(1, 1, 3, 3)
         with pytest.raises(Exception) as errinfo:
@@ -344,6 +355,17 @@ class TestBlurPool(BaseTester):
         actual = BlurPool2D(kernel_size, stride=stride)(data)
         expected = (batch_size, 4, int(4 / stride), int(8 / stride))
         assert actual.shape == expected
+
+    @pytest.mark.parametrize("shape", [(3, 8, 9), (8, 8, 9)], ids=["c_ne_h", "c_eq_h"])
+    @pytest.mark.parametrize("op", ["function", "module"])
+    def test_unbatched_input_raises_shape_error_6620(self, shape, op, device, dtype):
+        # A (C, H, W) input used to fail inside conv2d, or to run with H read as the channel count when C == H.
+        from kornia.core.exceptions import ShapeError
+
+        data = torch.rand(*shape, device=device, dtype=dtype)
+        pool = (lambda x: blur_pool2d(x, 3)) if op == "function" else BlurPool2D(3)
+        with pytest.raises(ShapeError):
+            pool(data)
 
     def test_exception(self):
         data = torch.rand(1, 1, 3, 3)
